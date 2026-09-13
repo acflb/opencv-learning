@@ -11,3 +11,7 @@ git push -u origin master
 git remote add origin https://github.com/acflb/opencv-learning.git
 git branch -M master
 git push -u origin master
+
+## git网络代理配置（端口号根据实际代理端口配置，默认为7890）
+git config --global http.proxy http://127.0.0.1:7890
+git config --global https.proxy http://127.0.0.1:7890
