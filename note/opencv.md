@@ -8,6 +8,7 @@ win+x打开管理员权限powershell,输入'Set-ExecutionPolicy RemoteSigned -Sc
 
 创建虚拟环境
 python -m venv <环境名称>
+python3.14 -m venv <环境名称>
 
 删除虚拟环境
 rm -rf <环境名称>
@@ -39,4 +40,9 @@ where python
 which python
 
 安装包
-pip install opencv-python cnocr pillow numpy requests onnxruntime pygetwindow
+<!-- 识别所需 -->
+pip install opencv-python cnocr pillow numpy requests onnxruntime
+<!-- 点击所需 -->
+pip install pyautogui pygetwindow pywin32
+<!-- 控制win原生窗口所需 -->
+pip install pywinauto Pillow

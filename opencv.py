@@ -1,25 +1,29 @@
+import ctypes
 import os
+import time
+from functools import lru_cache
+from pathlib import Path
+
 import cv2
 import numpy as np
-import pygetwindow as gw
-from PIL import ImageGrab
-from cnocr import CnOcr
-
 import pyautogui
-import ctypes
-
-import time
+import pygetwindow as gw
+import pyperclip
+from cnocr import CnOcr
+from PIL import ImageGrab
 from pywinauto.application import Application
 
-import pyperclip
 
-""" 保存名字 """
-# 1. 初始化 CnOcr 引擎
-print("正在初始化 CnOcr...")
-ocr = CnOcr()
-
-# 2. 读取锚点图标 (加号图标 plus_icon.png)
-TEMPLATE_PATH = "./images/plus_icon.png"
+BASE_DIR = Path(__file__).resolve().parent
+IMAGE_DIR = BASE_DIR / "images"
+TEMPLATE_PATH = IMAGE_DIR / "plus_icon.png"
+SAVE_TEMPLATE_PATHS = (
+    IMAGE_DIR / "save_icon_dark.png",
+    IMAGE_DIR / "save_icon_light.png",
+)
+BASE_SAVE_PATH = Path.home() / "Desktop"
+INVALID_FILENAME_CHARS = '/\\:<>?*|"'
+OCR = None
 
 
 def get_wechat_contact_adaptive():
@@ -27,14 +31,11 @@ def get_wechat_contact_adaptive():
     通过 OpenCV 寻找 `⊕` 图标位置，自适应动态定位并识别联系人名字
     """
     # 获取微信窗口
-    wins = gw.getWindowsWithTitle("微信")
-    if not wins:
+    win = get_window("微信")
+    if win is None:
         print("❌ 未找到微信窗口！")
         return "未识别联系人"
 
-    win = wins[0]
-    if win.isMinimized:
-        win.restore()
     win.activate()
 
     # 1. 截取微信顶部整个栏目（宽一些，包含搜索栏和聊天窗口顶部）
@@ -46,17 +47,14 @@ def get_wechat_contact_adaptive():
 
     full_header_img = ImageGrab.grab((crop_left, crop_top, crop_right, crop_bottom))
 
-    # 将 PIL Image 转为 OpenCV 格式 (BGR)
-    img_np = np.array(full_header_img)
-    img_bgr = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
-    img_gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
+    # 模板匹配只需要灰度图，避免不必要的 RGB -> BGR 转换。
+    img_gray = cv2.cvtColor(np.asarray(full_header_img), cv2.COLOR_RGB2GRAY)
 
-    # 2. 读取模板图 `⊕` 图标
-    if not os.path.exists(TEMPLATE_PATH):
+    template = load_template(TEMPLATE_PATH)
+    if template is None:
         print(f"❌ 找不到模板图片: {TEMPLATE_PATH}，请确保该文件在脚本目录下！")
         return "未识别联系人"
 
-    template = cv2.imread(TEMPLATE_PATH, cv2.IMREAD_GRAYSCALE)
     th, tw = template.shape[:2]
 
     # 3. 使用 OpenCV 模板匹配，寻找 ⊕ 图标的坐标
@@ -78,11 +76,8 @@ def get_wechat_contact_adaptive():
         # 截取联系人名字的小图
         name_crop = full_header_img.crop((name_left, name_top, name_right, name_bottom))
 
-        # 【调试用】保存截取的联系人小图，确认是否准确定位
-        name_crop.save("debug_name_crop.png")
-
         # 5. 送给 CnOcr 进行识别
-        ocr_results = ocr.ocr(name_crop)
+        ocr_results = get_ocr().ocr(name_crop)
 
         if ocr_results:
             # 调试输出完整的数组内容
@@ -93,9 +88,9 @@ def get_wechat_contact_adaptive():
             print(f"🔍 CnOcr 识别文本: {raw_text}")
 
             # 清理非法文件名字符 (Windows 文件夹名字禁止包含这些字符)
-            cleaned_name = raw_text
-            for char in r'/\:<>?*|":':
-                cleaned_name = cleaned_name.replace(char, "_")
+            cleaned_name = raw_text.translate(
+                str.maketrans({char: "_" for char in INVALID_FILENAME_CHARS})
+            )
 
             return cleaned_name
         else:
@@ -116,7 +111,7 @@ except Exception:
 # 设置 PyAutoGUI 动作间极短暂停
 pyautogui.PAUSE = 0.01
 
-def click_save_button(window_title="微信", template_path=["./images/save_icon_dark.png", "./images/save_icon_light.png"], threshold=0.8):
+def click_save_button(window_title="微信", template_paths=SAVE_TEMPLATE_PATHS, threshold=0.8):
     """
     通过模板匹配毫秒级查找并点击微信中的“保存”按钮
     
@@ -125,15 +120,11 @@ def click_save_button(window_title="微信", template_path=["./images/save_icon_
     :param threshold: 匹配相似度阈值（0.8 表示 80% 以上相似即认定匹配）
     """
     # 1. 获取微信窗口
-    windows = gw.getWindowsWithTitle(window_title)
-    if not windows:
+    win = get_window(window_title)
+    if win is None:
         print(f"❌ 未找到标题包含 '{window_title}' 的窗口")
         return False
-    
-    win = windows[0]
-    if win.isMinimized:
-        win.restore()
-        
+
     win_x, win_y, win_w, win_h = win.left, win.top, win.width, win.height
 
     # 2. 局部截图 ROI：微信操作栏固定在窗口底部，只截取底部 25% 的区域
@@ -146,22 +137,24 @@ def click_save_button(window_title="微信", template_path=["./images/save_icon_
     # 执行截屏并转为 OpenCV BGR 格式
     bbox = (crop_x, crop_y, crop_x + crop_w, crop_y + crop_h)
     screen = ImageGrab.grab(bbox=bbox)
-    frame_bgr = cv2.cvtColor(np.array(screen), cv2.COLOR_RGB2BGR)
+    frame_gray = cv2.cvtColor(np.asarray(screen), cv2.COLOR_RGB2GRAY)
 
-    # 3. 读取模板图
-    for path in template_path:
-        template = cv2.imread(path)
-        if template is None:
-            continue
-    if template is None:
-        print(f"❌ 找不到模板图片: {template_path}，请确认图片文件存在！")
+    # 3. 使用第一个可用模板，模板会在进程内缓存。
+    templates = [load_template(path) for path in template_paths]
+    templates = [template for template in templates if template is not None]
+    if not templates:
+        print(f"❌ 找不到模板图片: {template_paths}，请确认图片文件存在！")
         return False
 
+    # 4. 匹配两个主题模板，取最高分，避免主题变化导致误判。
+    matches = [
+        (cv2.minMaxLoc(cv2.matchTemplate(frame_gray, template, cv2.TM_CCOEFF_NORMED)), template)
+        for template in templates
+    ]
+    best_match = max(matches, key=lambda item: item[0][1])
+    _, max_val, _, max_loc = best_match[0]
+    template = best_match[1]
     temp_h, temp_w = template.shape[:2]
-
-    # 4. 执行毫秒级模板匹配
-    res = cv2.matchTemplate(frame_bgr, template, cv2.TM_CCOEFF_NORMED)
-    min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(res)
 
     print(f"当前最高匹配度: {max_val:.2f}")
 
@@ -189,23 +182,18 @@ def click_save_button(window_title="微信", template_path=["./images/save_icon_
 
 
 """ 存储到对应联系人文件夹 """
-BASE_SAVE_PATH = os.path.join(os.path.expanduser("~"), "Desktop")
-
 def handle_select_folder_dialog(contact_name):
     """
     Step 2 (特制版): 处理弹出的【选择文件夹】对话框。
     在此对话框内新建文件夹并选中。
     """
     try:
-        folder_dialog = None  # 全局变量，用于存储【选择文件夹】对话框的窗口对象
-
-        BASE_SAVE_PATH = os.path.join(os.path.expanduser("~"), "Desktop")
         app = Application(backend="win32").connect(title_re="选择文件夹", class_name="#32770", timeout=1)
         folder_dialog = app.window(title_re="选择文件夹", class_name="#32770")
         folder_dialog.set_focus()
         pyautogui.hotkey('alt', 'd')
         time.sleep(0.2)
-        pyperclip.copy(BASE_SAVE_PATH)
+        pyperclip.copy(str(BASE_SAVE_PATH))
         pyautogui.hotkey('ctrl', 'v')
         pyautogui.press('enter')
         time.sleep(0.5)
@@ -217,9 +205,11 @@ def handle_select_folder_dialog(contact_name):
         # 3. 输入联系人名字作为新文件夹名并确认
         pyperclip.copy(contact_name)
         pyautogui.hotkey('ctrl', 'v')
+        
         time.sleep(0.2)
         pyautogui.press('enter')  #  新建文件夹
         time.sleep(0.4)
+        pyautogui.hotkey('y')
 
         # 4. 触发右下角的“选择文件夹”按钮
         folder_dialog.child_window(title="选择文件夹", class_name="Button").click_input()
@@ -229,6 +219,32 @@ def handle_select_folder_dialog(contact_name):
     except Exception as e:
         print(f"❌ 操控【选择文件夹】窗口失败: {e}")
         return False
+
+
+def get_window(title):
+    """返回第一个匹配窗口，并在需要时恢复窗口。"""
+    windows = gw.getWindowsWithTitle(title)
+    if not windows:
+        return None
+    window = windows[0]
+    if window.isMinimized:
+        window.restore()
+    return window
+
+
+@lru_cache(maxsize=8)
+def load_template(path):
+    """缓存灰度模板，避免每次操作重复读取和转换图片。"""
+    return cv2.imread(os.fspath(path), cv2.IMREAD_GRAYSCALE)
+
+
+def get_ocr():
+    """只在确实需要识别联系人时初始化 OCR 引擎。"""
+    global OCR
+    if OCR is None:
+        print("正在初始化 CnOcr...")
+        OCR = CnOcr()
+    return OCR
 
 
 if __name__ == "__main__":
