@@ -48,3 +48,6 @@ pip install pyautogui pygetwindow pywin32
 pip install pywinauto Pillow
 <!-- 快捷键所需 -->
 keyboard
+
+#### 打包
+pyinstaller --onefile --collect-all torch --collect-all torchvision --collect-all cnocr --collect-all cnstd --add-data "venv\Lib\site-packages\rapidocr;rapidocr" --add-data "images;images" opencv.py

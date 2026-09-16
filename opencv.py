@@ -14,10 +14,19 @@ from PIL import ImageGrab
 from pywinauto.application import Application
 
 import keyboard
+import sys
 
 
-BASE_DIR = Path(__file__).resolve().parent
-IMAGE_DIR = BASE_DIR / "images"
+def resource_path(relative_path):
+    """获取资源文件的绝对路径，兼容开发环境和 PyInstaller 打包后的环境。"""
+    try:
+        base_path = sys._MEIPASS
+    except AttributeError:
+        base_path = os.path.abspath(os.path.dirname(__file__))
+    return os.path.join(base_path, relative_path)
+
+
+IMAGE_DIR = Path(resource_path("images"))
 TEMPLATE_PATH = IMAGE_DIR / "plus_icon.png"
 SAVE_TEMPLATE_PATHS = (
     IMAGE_DIR / "save_icon_dark.png",
@@ -255,7 +264,7 @@ def do_click_task():
     contact = get_wechat_contact_adaptive()
     if click_save_button("微信"):
         handle_select_folder_dialog(contact)
-
+        
 
 if __name__ == "__main__":
     keyboard.add_hotkey('ctrl+alt+p', do_click_task)
