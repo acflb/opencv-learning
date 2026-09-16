@@ -46,3 +46,5 @@ pip install opencv-python cnocr pillow numpy requests onnxruntime
 pip install pyautogui pygetwindow pywin32
 <!-- 控制win原生窗口所需 -->
 pip install pywinauto Pillow
+<!-- 快捷键所需 -->
+keyboard

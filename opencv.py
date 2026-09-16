@@ -13,6 +13,8 @@ from cnocr import CnOcr
 from PIL import ImageGrab
 from pywinauto.application import Application
 
+import keyboard
+
 
 BASE_DIR = Path(__file__).resolve().parent
 IMAGE_DIR = BASE_DIR / "images"
@@ -23,7 +25,9 @@ SAVE_TEMPLATE_PATHS = (
 )
 BASE_SAVE_PATH = Path.home() / "Desktop"
 INVALID_FILENAME_CHARS = '/\\:<>?*|"'
+global OCR
 OCR = None
+OCR = CnOcr()
 
 
 def get_wechat_contact_adaptive():
@@ -77,7 +81,7 @@ def get_wechat_contact_adaptive():
         name_crop = full_header_img.crop((name_left, name_top, name_right, name_bottom))
 
         # 5. 送给 CnOcr 进行识别
-        ocr_results = get_ocr().ocr(name_crop)
+        ocr_results = OCR.ocr(name_crop)
 
         if ocr_results:
             # 调试输出完整的数组内容
@@ -238,17 +242,26 @@ def load_template(path):
     return cv2.imread(os.fspath(path), cv2.IMREAD_GRAYSCALE)
 
 
-def get_ocr():
-    """只在确实需要识别联系人时初始化 OCR 引擎。"""
-    global OCR
-    if OCR is None:
-        print("正在初始化 CnOcr...")
-        OCR = CnOcr()
-    return OCR
+# def get_ocr():
+#     """只在确实需要识别联系人时初始化 OCR 引擎。"""
+#     global OCR
+#     if OCR is None:
+#         print("正在初始化 CnOcr...")
+#         OCR = CnOcr()
+#     return OCR
 
-
-if __name__ == "__main__":
+def do_click_task():
+    print("触发啦喵！")
     contact = get_wechat_contact_adaptive()
     if click_save_button("微信"):
         handle_select_folder_dialog(contact)
-    print("✅ 最终识别的联系人名称:", contact)
+
+
+if __name__ == "__main__":
+    keyboard.add_hotkey('ctrl+alt+p', do_click_task)
+    print("后台监听中，按 Ctrl+Alt+P 触发~")
+    keyboard.wait()  # 让程序一直挂着，不退出
+    # contact = get_wechat_contact_adaptive()
+    # if click_save_button("微信"):
+    #     handle_select_folder_dialog(contact)
+    # print("✅ 最终识别的联系人名称:", contact)
