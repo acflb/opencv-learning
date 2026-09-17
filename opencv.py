@@ -80,8 +80,8 @@ def get_wechat_contact_adaptive():
         print(f"🎯 成功定位 ⊕ 图标坐标: x={icon_x}, y={icon_y} (匹配度: {max_val:.2f})")
 
         # 4. 根据 ⊕ 图标的位置计算联系人名字所在的 ROI 区域 (Region of Interest)
-        # 从 ⊕ 图标右侧偏移一定距离（根据你的界面，大约右移 40~60 像素）
-        name_left = icon_x + tw + 5  # ⊕ 图标右边缘往右 20 像素
+        # 从 ⊕ 图标右侧偏移一定距离（根据界面，大约右移 40~60 像素）
+        name_left = icon_x + tw + 5  # ⊕ 图标右边缘往右 5 像素
         name_top = icon_y - 5  # 稍微向上对齐
         name_right = name_left + 300  # 联系人名字的宽度（给 300 像素足够显示长名字）
         name_bottom = name_top + th + 15  # 高度与图标类似
@@ -197,32 +197,25 @@ def click_save_button(window_title="微信", template_paths=SAVE_TEMPLATE_PATHS,
 """ 存储到对应联系人文件夹 """
 def handle_select_folder_dialog(contact_name):
     """
-    Step 2 (特制版): 处理弹出的【选择文件夹】对话框。
+    Step 2 : 处理弹出的【选择文件夹】对话框。
     在此对话框内新建文件夹并选中。
     """
     try:
         app = Application(backend="win32").connect(title_re="选择文件夹", class_name="#32770", timeout=1)
         folder_dialog = app.window(title_re="选择文件夹", class_name="#32770")
+
+        target_folder = BASE_SAVE_PATH / contact_name
+
+        if not target_folder.exists():
+            target_folder.mkdir(parents=True, exist_ok=True)
+
         folder_dialog.set_focus()
         pyautogui.hotkey('alt', 'd')
         time.sleep(0.2)
-        pyperclip.copy(str(BASE_SAVE_PATH))
+        pyperclip.copy(str(target_folder))
         pyautogui.hotkey('ctrl', 'v')
         pyautogui.press('enter')
         time.sleep(0.5)
-
-        # 2. 快捷键 Ctrl+Shift+N 新建文件夹
-        pyautogui.hotkey('ctrl', 'shift', 'n')
-        time.sleep(0.5)
-
-        # 3. 输入联系人名字作为新文件夹名并确认
-        pyperclip.copy(contact_name)
-        pyautogui.hotkey('ctrl', 'v')
-        
-        time.sleep(0.2)
-        pyautogui.press('enter')  #  新建文件夹
-        time.sleep(0.4)
-        pyautogui.hotkey('y')
 
         # 4. 触发右下角的“选择文件夹”按钮
         folder_dialog.child_window(title="选择文件夹", class_name="Button").click_input()

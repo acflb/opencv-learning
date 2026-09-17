@@ -50,4 +50,5 @@ pip install pywinauto Pillow
 keyboard
 
 #### 打包
+'--noconsole'关闭控制台输出
 pyinstaller --onefile --collect-all torch --collect-all torchvision --collect-all cnocr --collect-all cnstd --add-data "venv\Lib\site-packages\rapidocr;rapidocr" --add-data "images;images" opencv.py
