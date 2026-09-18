@@ -263,7 +263,4 @@ if __name__ == "__main__":
     keyboard.add_hotkey('ctrl+alt+p', do_click_task)
     print("后台监听中，按 Ctrl+Alt+P 触发~")
     keyboard.wait()  # 让程序一直挂着，不退出
-    # contact = get_wechat_contact_adaptive()
-    # if click_save_button("微信"):
-    #     handle_select_folder_dialog(contact)
-    # print("✅ 最终识别的联系人名称:", contact)
+    
